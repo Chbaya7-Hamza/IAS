@@ -1,0 +1,36 @@
+# Environment variables (contains API keys - NEVER upload!)
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model cache (too large for GitHub)
+.cache/
+models/
+*.bin
+*.safetensors
+*.ckpt
+
+# Logs
+*.log
