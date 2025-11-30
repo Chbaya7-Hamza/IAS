@@ -8,9 +8,16 @@ How to use:
 3. Run all cells
 4. See AI predictions in action!
 """
-# Add this import at the top
-from n8n_connector import N8NConnector
+# Add this import at the top0
+import os
 from huggingface_hub import login
+
+from dotenv import load_dotenv
+from heatguard_n8n_connector import HeatGuardN8NConnector
+
+
+load_dotenv()  # load variables from .env
+HF_TOKEN = os.environ.get("HUGGINGFACE_API_KEY")
 
 # HuggingFace Token
 # DON'T DO THIS - EXPOSED API KEY!
@@ -336,23 +343,55 @@ class DailyReportGenerator:
 # CELL 7: Main HeatGuard AI System
 # ============================================================================
 
+import requests
+
+class HeatGuardN8NConnector:
+    def __init__(self, webhook_alert_url, webhook_report_url):
+        self.webhook_alert_url = webhook_alert_url
+        self.webhook_report_url = webhook_report_url
+        print("✓ HeatGuardN8NConnector initialized")
+
+    def send_alert(self, data: dict, alert_type: str):
+        try:
+            response = requests.post(self.webhook_alert_url, json=data)
+            response.raise_for_status()
+            print(f"Sent alert to n8n ({alert_type})")
+        except Exception as e:
+            print(f"Error sending alert to n8n: {e}")
+
+    def send_daily_report(self, report: dict):
+        try:
+            response = requests.post(self.webhook_report_url, json=report)
+            response.raise_for_status()
+            print(f"Sent daily report to n8n: {report['date']}")
+        except Exception as e:
+            print(f"Error sending daily report to n8n: {e}")
+
+
+
 class HeatGuardAISystem:
-    """Main HeatGuard AI System with n8n integration"""
+    """Main HeatGuard AI System"""
 
     def __init__(self, enable_n8n=True):
         print("\n" + "=" * 70)
         print("Initializing HeatGuard AI System...")
         print("=" * 70 + "\n")
 
+        # Core components
         self.buffer = SensorDataBuffer()
         self.anomaly_detector = AnomalyDetector()
         self.gemma_predictor = GemmaPredictor()
         self.report_generator = DailyReportGenerator(self.gemma_predictor)
 
-        # Add n8n integration
+        # n8n integration
         self.enable_n8n = enable_n8n
         if enable_n8n:
-            self.n8n = N8NConnector()
+            import os
+            self.n8n = HeatGuardN8NConnector(
+                webhook_alert_url=os.getenv("N8N_ALERT_URL"),
+                webhook_report_url=os.getenv("N8N_REPORT_URL")
+            )
+
             print("✓ n8n integration enabled")
         else:
             self.n8n = None
@@ -362,53 +401,35 @@ class HeatGuardAISystem:
         print("✓ HeatGuard AI System Ready!")
         print("=" * 70 + "\n")
 
-    def process_sensor_data(self, sensor_data: Dict) -> Dict:
-        """
-        Process sensor data and send alerts to n8n
-        """
-        # Add to daily buffer
+    def process_sensor_data(self, sensor_data: dict) -> dict:
+        """Process a sensor reading and send alerts if needed"""
         self.buffer.add_reading(sensor_data)
-
-        # Real-time anomaly detection
         alert = self.anomaly_detector.check_thresholds(sensor_data)
 
-        # Send to n8n if enabled
         if self.enable_n8n and self.n8n:
             severity = alert['severity']
-
             if severity in ['critical', 'warning']:
-                # Prepare data for n8n
-                n8n_data = {
-                    **sensor_data,
-                    'severity': severity,
-                    'alerts': alert['alerts'],
-                    'timestamp': alert['timestamp']
-                }
-
-                # Send to n8n
+                n8n_data = {**sensor_data, 'severity': severity, 'alerts': alert['alerts'], 'timestamp': alert['timestamp']}
                 self.n8n.send_alert(n8n_data, alert_type=severity)
 
         return alert
 
-    def generate_daily_report(self) -> Dict:
+    def generate_daily_report(self) -> dict:
         """Generate daily report and send to n8n"""
         df = self.buffer.get_dataframe()
-
         if df.empty:
             print("No data for report generation")
             return None
 
-        # Collect anomalies
         anomalies = [d for d in self.buffer.data if d.get('alerts')]
-
-        # Generate report
         report = self.report_generator.generate_report(df, anomalies)
 
-        # Send to n8n
         if self.enable_n8n and self.n8n and report:
             self.n8n.send_daily_report(report)
 
         return report
+
+
 # ============================================================================
 # CELL 8: Test Functions
 # ============================================================================
@@ -610,34 +631,3 @@ if __name__ == "__main__":
 #     json.dump(report, f, indent=2)
 # print("✓ Report saved to heatguard_report.json")
 # In heatguard_ai_system.py
-
-from heatguard_n8n_connector import HeatGuardN8NConnector
-
-
-class HeatGuardAISystem:
-    def __init__(self):
-        # ... existing code ...
-
-        # Add n8n connector
-        self.n8n = HeatGuardN8NConnector()
-
-    def process_sensor_data(self, sensor_data):
-        # ... existing code ...
-
-        # If critical, send to n8n
-        if alert['severity'] == 'critical':
-            self.n8n.send_critical_alert({
-                **sensor_data,
-                'alerts': alert['alerts']
-            })
-
-        return alert
-
-    def generate_daily_report(self):
-        # ... existing code ...
-
-        # Send report to n8n
-        if report:
-            self.n8n.send_daily_report(report)
-
-        return report
